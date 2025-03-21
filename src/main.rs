@@ -7,6 +7,12 @@ use std::path::PathBuf;
 use std::process::Command as ExternalCommand;
 use slug::slugify;
 
+const GWF_DIR: &str = ".gwf";
+
+fn get_gwf_dir() -> PathBuf {
+    dirs::home_dir().unwrap().join(GWF_DIR)
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct Config {
     post_commit_command: String,
@@ -35,10 +41,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let scope = sub_matches.get_one::<String>("scope").cloned().unwrap_or_else(|| prompt_user("Enter the scope of the commit (e.g., ui, api): "));
             let message = sub_matches.get_one::<String>("message").cloned().unwrap_or_else(|| prompt_user("Enter the message for the commit: "));
 
-            create_branch(&type_, &scope, &message)?;
+            new_branch(&type_, &scope, &message)?;
         }
         Some(("finish", _)) => {
-            commit_and_run_post_commit_command()?;
+            finish()?;
         }
         _ => unreachable!(),
     }
@@ -46,34 +52,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn create_branch(type_: &str, scope: &str, message: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn new_branch(type_: &str, scope: &str, message: &str) -> Result<(), Box<dyn std::error::Error>> {
     let repo = Repository::open(".")?;
     let branch_name = format!("{}/{}/{}", slugify(type_), slugify(scope), slugify(message));
 
-    // Create the new branch
-    let mut index = repo.index()?;
-    index.add_all(["."], git2::IndexAddOption::empty(), None)?;
-    index.write()?;
-
-    let tree_id = index.write_tree()?;
-    let tree = repo.find_tree(tree_id)?;
-    let sig = repo.signature()?;
+    // Get the current HEAD commit
     let head = repo.head()?;
     let parent = repo.find_commit(head.target().unwrap())?;
 
-    let branch = repo.branch(&branch_name, &parent, false)?;
+    // Create the new branch
+    repo.branch(&branch_name, &parent, false)?;
 
     // Check out the new branch
     let refname = format!("refs/heads/{}", branch_name);
-    repo.set_head(&refname);
+    repo.set_head(&refname)?;
 
     let mut checkout_opts = git2::build::CheckoutBuilder::new();
-    checkout_opts.force();
+    checkout_opts
+        .safe() // Use safe checkout instead of force
+        .recreate_missing(true) // Recreate missing files
+        .allow_conflicts(true); // Allow conflicts to be resolved later
 
     repo.checkout_head(Some(&mut checkout_opts))?;
 
     // Store the commit message in a file outside the repository
-    let config_file = PathBuf::from(format!("~/.git-workflow/{}.txt", branch_name));
+    let config_file = get_gwf_dir().join(slugify(&branch_name));
     fs::create_dir_all(config_file.parent().unwrap())?;
     let mut file = fs::File::create(config_file)?;
     writeln!(file, "{}", message)?;
@@ -82,7 +85,7 @@ fn create_branch(type_: &str, scope: &str, message: &str) -> Result<(), Box<dyn 
     Ok(())
 }
 
-fn commit_and_run_post_commit_command() -> Result<(), Box<dyn std::error::Error>> {
+fn finish() -> Result<(), Box<dyn std::error::Error>> {
     let repo = Repository::open(".")?;
     let mut index = repo.index()?;
     let tree_id = index.write_tree()?;
@@ -96,28 +99,30 @@ fn commit_and_run_post_commit_command() -> Result<(), Box<dyn std::error::Error>
         return Err("No changes to commit".into());
     }
 
+    // Get current branch name and read commit message from file
+    let current_branch = head.shorthand().ok_or("Could not get current branch name")?;
+    let message_file = get_gwf_dir().join(slugify(current_branch));
+    let commit_message = fs::read_to_string(message_file)?;
+
     // Commit the changes
-    let commit_message = "Conventional commit message".to_string(); // You can modify this to read from a file if needed
-    let commit_id = repo.commit(None, &sig, &sig, &commit_message, &tree, &[&parent])?;
-    let commit = repo.find_commit(commit_id)?;
+    repo.commit(None, &sig, &sig, &commit_message, &tree, &[&parent])?;
 
-    // Read the post-commit command from the user's home directory
-    let home_dir = dirs::home_dir().unwrap();
-    let config_file = home_dir.join(".git-workflow/config.toml");
-    let config_content = fs::read_to_string(config_file)?;
-    let config: Config = toml::from_str(&config_content)?;
-
-    // Run the post-commit command
-    let output = ExternalCommand::new(&config.post_commit_command).output()?;
-    if output.status.success() {
-        println!("Post-commit command executed successfully");
-    } else {
-        eprintln!("Post-commit command failed: {}", String::from_utf8_lossy(&output.stderr));
+    // Try to read and execute the post-commit command if config exists
+    let config_file = get_gwf_dir().join("config.toml");
+    if let Ok(config_content) = fs::read_to_string(config_file) {
+        if let Ok(config) = toml::from_str::<Config>(&config_content) {
+            // Run the post-commit command
+            let output = ExternalCommand::new(&config.post_commit_command).output()?;
+            if output.status.success() {
+                println!("Post-commit command executed successfully");
+            } else {
+                eprintln!("Post-commit command failed: {}", String::from_utf8_lossy(&output.stderr));
+            }
+        }
     }
 
     Ok(())
 }
-
 
 fn prompt_user(prompt: &str) -> String {
     print!("{}", prompt);
