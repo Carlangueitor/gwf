@@ -100,7 +100,18 @@ fn finish() -> Result<(), Box<dyn std::error::Error>> {
     // Get current branch name and read commit message from file
     let current_branch = head.shorthand().ok_or("Could not get current branch name")?;
     let message_file = get_gwf_dir().join(slugify(current_branch));
-    let commit_message = fs::read_to_string(message_file)?;
+    let message = fs::read_to_string(message_file)?;
+
+    // Extract type and scope from branch name (format: type/scope/message)
+    let parts: Vec<&str> = current_branch.split('/').collect();
+    if parts.len() != 3 {
+        return Err("Invalid branch name format. Expected: type/scope/message".into());
+    }
+    let type_ = parts[0];
+    let scope = parts[1];
+    
+    // Construct conventional commit message
+    let commit_message = format!("{}({}): {}", type_, scope, message);
 
     // Create the commit
     let commit_id = repo.commit(
