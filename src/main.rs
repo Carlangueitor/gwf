@@ -6,9 +6,24 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::Command as ExternalCommand;
 use slug::slugify;
+use dialoguer::FuzzySelect;
 
 const GWF_DIR: &str = ".gwf";
 const GWF_CONFIG: &str = "gwf.toml";
+
+// Common conventional commit types
+const CONVENTIONAL_TYPES: &[&str] = &[
+    "feat",     // New feature
+    "fix",      // Bug fix
+    "docs",     // Documentation changes
+    "style",    // Code style changes (formatting, etc.)
+    "refactor", // Code refactoring
+    "perf",     // Performance improvements
+    "test",     // Adding or modifying tests
+    "build",    // Build system or external dependencies
+    "ci",       // CI configuration changes
+    "chore",    // Other changes that don't modify source or test files
+];
 
 fn get_gwf_dir() -> PathBuf {
     dirs::home_dir().unwrap().join(GWF_DIR)
@@ -165,9 +180,18 @@ fn finish() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn prompt_user(prompt: &str) -> String {
-    print!("{}", prompt);
-    io::stdout().flush().unwrap();
-    let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap();
-    input.trim().to_string()
+    if prompt.contains("type of the commit") {
+        let selection = FuzzySelect::new()
+            .with_prompt(prompt)
+            .items(CONVENTIONAL_TYPES)
+            .interact()
+            .unwrap();
+        CONVENTIONAL_TYPES[selection].to_string()
+    } else {
+        print!("{}", prompt);
+        io::stdout().flush().unwrap();
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).unwrap();
+        input.trim().to_string()
+    }
 }
