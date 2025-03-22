@@ -138,11 +138,25 @@ fn finish() -> Result<(), Box<dyn std::error::Error>> {
     if let Ok(config_content) = config_content {
         if let Ok(config) = toml::from_str::<Config>(&config_content) {
             // Run the post-commit command
-            let output = ExternalCommand::new(&config.post_commit_command).output()?;
+            let output = ExternalCommand::new("sh")
+                .arg("-c")
+                .arg(&config.post_commit_command)
+                .output()?;
+            
+            // Print stdout if not empty
+            if !output.stdout.is_empty() {
+                println!("Post-commit command output:\n{}", String::from_utf8_lossy(&output.stdout));
+            }
+            
+            // Print stderr if not empty
+            if !output.stderr.is_empty() {
+                eprintln!("Post-commit command errors:\n{}", String::from_utf8_lossy(&output.stderr));
+            }
+            
             if output.status.success() {
                 println!("Post-commit command executed successfully");
             } else {
-                eprintln!("Post-commit command failed: {}", String::from_utf8_lossy(&output.stderr));
+                eprintln!("Post-commit command failed with exit code: {}", output.status.code().unwrap_or(-1));
             }
         }
     }
