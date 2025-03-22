@@ -8,6 +8,7 @@ use std::process::Command as ExternalCommand;
 use slug::slugify;
 
 const GWF_DIR: &str = ".gwf";
+const GWF_CONFIG: &str = "gwf.toml";
 
 fn get_gwf_dir() -> PathBuf {
     dirs::home_dir().unwrap().join(GWF_DIR)
@@ -114,8 +115,16 @@ fn finish() -> Result<(), Box<dyn std::error::Error>> {
     println!("Created commit: {}", commit_id);
 
     // Try to read and execute the post-commit command if config exists
-    let config_file = get_gwf_dir().join("config.toml");
-    if let Ok(config_content) = fs::read_to_string(config_file) {
+    // First try repository root, then .gwf directory
+    let repo_root = repo.workdir().ok_or("Could not get repository root")?;
+    let config_file = repo_root.join(GWF_CONFIG);
+    let config_content = if config_file.exists() {
+        fs::read_to_string(config_file)
+    } else {
+        fs::read_to_string(get_gwf_dir().join(GWF_CONFIG))
+    };
+
+    if let Ok(config_content) = config_content {
         if let Ok(config) = toml::from_str::<Config>(&config_content) {
             // Run the post-commit command
             let output = ExternalCommand::new(&config.post_commit_command).output()?;
