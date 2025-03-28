@@ -70,7 +70,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn new_branch(type_: &str, scope: &str, message: &str) -> Result<(), Box<dyn std::error::Error>> {
     let repo = Repository::open(".")?;
-    let branch_name = format!("{}/{}/{}", slugify(type_), slugify(scope), slugify(message));
+    let branch_name = if scope.is_empty() {
+        format!("{}/{}", slugify(type_), slugify(message))
+    } else {
+        format!("{}/{}/{}", slugify(type_), slugify(scope), slugify(message))
+    };
 
     // Get the current HEAD commit
     let head = repo.head()?;
@@ -117,16 +121,22 @@ fn finish() -> Result<(), Box<dyn std::error::Error>> {
     let message_file = get_gwf_dir().join(slugify(current_branch));
     let message = fs::read_to_string(message_file)?;
 
-    // Extract type and scope from branch name (format: type/scope/message)
+    // Extract type and scope from branch name (format: type/scope/message or type/message)
     let parts: Vec<&str> = current_branch.split('/').collect();
-    if parts.len() != 3 {
-        return Err("Invalid branch name format. Expected: type/scope/message".into());
-    }
-    let type_ = parts[0];
-    let scope = parts[1];
+    let (type_, scope) = if parts.len() == 2 {
+        (parts[0], "")
+    } else if parts.len() == 3 {
+        (parts[0], parts[1])
+    } else {
+        return Err("Invalid branch name format. Expected: type/scope/message or type/message".into());
+    };
     
     // Construct conventional commit message
-    let commit_message = format!("{}({}): {}", type_, scope, message);
+    let commit_message = if scope.is_empty() {
+        format!("{}: {}", type_, message)
+    } else {
+        format!("{}({}): {}", type_, scope, message)
+    };
 
     // Create the commit
     let commit_id = repo.commit(
