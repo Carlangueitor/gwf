@@ -7,7 +7,7 @@ gwf
 Usage: gwf <COMMAND>
 
 Commands:
-  new     Create a new feature branch with a conventional commit message
+  nfb     Create a new feature branch with a conventional commit message
   finish  Commit changes and run a post-commit command
   help    Print this message or the help of the given subcommand(s)
 

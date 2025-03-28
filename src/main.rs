@@ -2,7 +2,7 @@ use clap::{Arg, Command};
 use serde::{Deserialize, Serialize};
 mod commands;
 
-use commands::new::{new_branch, prompt_user};
+use commands::nfb::{new_branch, prompt_user};
 use commands::finish::finish;
 
 
@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .subcommand_required(true)
         .arg_required_else_help(true)
         .subcommand(
-            Command::new("new")
+            Command::new("nfb")
                 .about("Create a new feature branch with a conventional commit message")
                 .arg(Arg::new("type").short('t').long("type").value_name("TYPE").help("Type of the commit (e.g., feat, fix)"))
                 .arg(Arg::new("scope").short('s').long("scope").value_name("SCOPE").help("Scope of the commit (e.g., ui, api)"))
@@ -29,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .get_matches();
 
     match matches.subcommand() {
-        Some(("new", sub_matches)) => {
+        Some(("nfb", sub_matches)) => {
             let type_ = sub_matches.get_one::<String>("type").cloned().unwrap_or_else(|| prompt_user("Enter the type of the commit (e.g., feat, fix): "));
             let scope = sub_matches.get_one::<String>("scope").cloned().unwrap_or_else(|| prompt_user("Enter the scope of the commit (e.g., ui, api): "));
             let message = sub_matches.get_one::<String>("message").cloned().unwrap_or_else(|| prompt_user("Enter the message for the commit: "));
