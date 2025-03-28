@@ -14,3 +14,11 @@ Commands:
 Options:
   -h, --help  Print help
 ```
+
+## Developing
+Use [bacon](https://dystroy.org/bacon/)
+
+To install locally use cargo:
+```bash
+cargo install --path .
+```
